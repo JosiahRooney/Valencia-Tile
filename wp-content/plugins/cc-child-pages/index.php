@@ -6,8 +6,8 @@ Description: Show links to child pages
 Author: Caterham Computing
 Text Domain: cc-child-pages
 Domain Path: /languages
-Version: 1.24
-Author URI: http://www.caterhamcomputing.net/
+Version: 1.34
+Author URI: https://caterhamcomputing.net/
 */
 include_once('includes/ccchildpages.php');
 
@@ -45,5 +45,11 @@ add_action('admin_init', 'ccchildpages::register_options');
 
 // Add options page
 add_action('admin_menu', 'ccchildpages::options_menu');
+
+// Add custom query variables for paging
+add_filter( 'query_vars', 'ccchildpages::add_query_strings' );
+
+// Add action to handle offset correction for pagination ...
+add_action( 'pre_get_posts', 'ccchildpages::query_offset', 1 );
 
 /*EOF*/

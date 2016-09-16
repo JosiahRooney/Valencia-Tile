@@ -1,17 +1,17 @@
-﻿=== CC Child Pages ===
+=== CC Child Pages ===
 
 Plugin Name: CC Child Pages
 Contributors: caterhamcomputing
 Plugin URI: http://ccchildpages.ccplugins.co.uk/
-Author URI: http://www.caterhamcomputing.net/
+Author URI: https://caterhamcomputing.net/
 Donate Link: http://ccchildpages.ccplugins.co.uk/donate/
 Requires at least: 4.0
-Tested up to: 4.1
-Stable tag: 1.24
-Version: 1.24
-Tags: child pages widget, child pages shortcode, child pages, child page, shortcode, widget, list, sub-pages, subpages, sub-page, subpage, sub page, responsive, child-page, child-pages, childpage, childpages
+Tested up to: 4.6
+Stable tag: 1.34
+Version: 1.34
+Tags: child pages widget, child pages shortcode, child pages, child page, shortcode, widget, list, sub-pages, subpages, sub-page, subpage, sub page, responsive, child-page, child-pages, childpage, childpages, siblings, sibling pages, posts, custom posts
 
-Adds a responsive shortcode to list child pages. Pre-styled or specify your own CSS class for custom styling. Includes child pages widget.
+Adds a responsive shortcode to list child and sibling pages. Pre-styled or specify your own CSS class for custom styling. Includes child pages widget.
 
 == Description ==
 
@@ -31,9 +31,11 @@ You can choose between 1, 2, 3 & 4 column layouts.
 
 CC Child Pages also includes a widget for displaying child pages within your sidebars.
 
-The widget can be set to show the children of the current page or a specific page.
+The widget can be set to show the children of the current page or a specific page, or to show all pages.
 
 Pages can be sorted by their menu order, title or ID. You can also select the depth of pages to be displayed.
+
+You can now also tick the checkbox to show all pages, in which case the widget will behave much like the standard Pages widget but with additional options.
 
 = Using the shortcode =
 
@@ -56,9 +58,19 @@ You can also show the child pages of a specific page by adding the `ID` of the p
 
 `[child_pages id="42"]`
 
+... or you can specify multiple IDs in a comma-separated list (does not work when using `list="true"`)
+
+`[child_pages id="42,53,76"]`
+
 To exclude pages, use the `exclude` parameter. This allows you to specify a comma separated list of Page IDs to be exclude from the output of the shortcode.
 
 `[child_pages exclude="5,33,45"]`
+
+To display only specific pages, you can use the `page_ids` paremeter. This accepts a comma separated list of IDs. If this parameter is used, the `id` and `exclude` parameters are ignored.
+
+`[child_pages page_ids="3,7,10,35"]`
+
+The above code will display only the listed pages.
 
 If you want to prefer to use text other than the standard "Read more ..." to link to the pages, this can be specified with the `more` parameter:
 
@@ -107,6 +119,10 @@ You can stop Custom Excerpts from being truncated by seting the `truncate_excerp
 ... this will display custom excerpts exactly as entered without being shortened. (Especially useful if using the Rich Text Excerpts plugin, in which case all styling will be preserved.)
 
 When `truncate_excerpt` is set to `true`, excerpts will be truncated only if they exceed the specified word count (default 55). When custom excerpts are truncated, any HTML will be removed.
+
+If you have inserted `more` tags into your posts/pages, you may find that the `Continue reading` message is included in the excerpt. To hide this, set the `hide_wp_more` parameter to `true`:
+
+`[child_pages hide_wp_more="true"]`
 
 To change the order in which the child pages are listed, you can use the `orderby` and `order` parameters:
 
@@ -161,6 +177,95 @@ The columns are responsive, and should adjust according to the browser being re-
 
 **N.B. Because the shortcode uses the WordPress `wp_list_pages` function to output the list, columns are acheived by applying CSS styling to the functions standard output. This CSS should work fine in modern browsers, but in older browsers (such as Internet Explorer 8) the list will not be split into columns**
 
+= Sibling Pages =
+
+The shortcode also allows you to display sibling pages (those at the same level as the current page within the hierarchy).
+
+To do this, set the `siblings` parameter to `true`.
+
+This will override the `id` parameter and will append the current page to the `exclude` parameter.
+
+`[child_pages siblings="true"]`
+
+This can also be used with the `list` parameter
+
+`[child_pages siblings="true" list="true"]`
+
+By default, the shortcode will not display the current page when `siblings` is set to `true`. If you wish to include the current page, set the `show_current_page` parameter to `true`:
+
+`[child_pages siblings="true" show_current_page="true"]`
+
+`[child_pages siblings="true" list="true" show_current_page="true"]`
+
+= Limits =
+
+You can limit the number of child pages displayed using the `limit` parameter (unless the `list` parameter has been set to `"true"`).
+
+For example: 
+
+`[child_pages limit="5"]` will display only the first 5 child pages.
+
+= Offset =
+
+When not using `list="true"`, you can specify a value for `offset` to skip a set number of results. For example:
+
+`[child_pages offset="2"]`
+
+... will skip the first 2 pages.
+
+= Custom Fields =
+
+You may wish to show a different title, excerpt or "Read more..." message on certain pages. To achieve this, you can set values in custom fields on specific pages - to tell the shortcode to use the custom value, set the `use_custom_excerpt`, `use_custom_title` or `use_custom_more` parameter to the name of the custom field to be used.
+
+If the field used is set for a page, its value will be used instead of the default excerpt/title/"Read more...". Pages on which the custom field is not populated will use the default value.
+
+`[child_pages use_custom_excerpt="custom_cc_excerpt"]`
+
+... will replace the standard excerpt with the value of the custom field `custom_cc_excerpt` (if it is set)
+
+`[child_pages use_custom_title="custom_cc_title"]`
+
+... will replace the standard title with the value of the custom field `custom_cc_title` (if it is set)
+
+`[child_pages use_custom_more="custom_cc_more"]`
+
+... will replace the standard "Read more..." message with the value of the custom field `custom_cc_more` (if it is set)
+
+`[child_pages use_custom_link="custom_cc_link"]`
+
+... will replace URL link for the page with the URL specified in the value of the custom field `custom_cc_link` (if it is set). (The default value of `use_custom_link` is `"cc_child_pages_link"`, so that this field can be set without the need to specify the parameter. To disable this functionality, set `use_custom_link=""`.)
+
+**N.B.** `use_custom_excerpt`, `use_custom_title`, `use_custom_more` and `use_custom_link` will not work when `list="true"`
+
+= Pagination =
+
+CC Child Pages now includes basic support for pagination.
+
+You can set the number of child pages to be displayed on each page by specifying the `posts_per_page` parameter, e.g.:
+
+`[child_pages posts_per_page="6"]`
+
+The above code will display 6 child pages on each page, and if there are more than 6 child pages found navigation links will be displayed.
+
+You can also specify the `page` parameter to display a specific page. For example:
+
+`[child_pages posts_per_page="3" page="2"]`
+
+The above code will show the second page of results (item 4 onwards, up to 3 items). **N.B.** when the `page` parameter is specified, no pagination links are displayed.
+
+The `page` parameter has no effect unless `posts_per_page` is specified.
+
+**Pagination functionality is limited on a static front page**
+
+**N.B.** The pagination parameters are ignored when `list="true"`
+
+= Sticky Posts =
+
+By default, sticky posts are not shown ... however, if you want them to be displayed you can set the `ignore_sticky_posts` parameter to be `false`:
+
+`[child_pages ignore_sticky_posts="false"]`
+
+
 == Installation ==
 
 1. Upload the plugin to the `/wp-content/plugins/` directory
@@ -182,6 +287,54 @@ The columns are responsive, and should adjust according to the browser being re-
 12. CC Child Pages widget options
 
 == Changelog ==
+
+= 1.34 =
+* Added `ignore_sticky_posts` parameter
+* Added `limit` parameter to limit the number of pages displayed
+* Added `offset` parameter to allow skipping a number of pages
+
+= 1.33 =
+* Added `posts_per_page` and `page` parameters for basic pagination
+* Added `page_ids` parameter to allow display of specific pages
+* Added `use_custom_link` parameter to allow the over-riding of the link target on a per page basis
+* Added new CSS IDs to help make styling more flexible
+
+= 1.32 =
+* Bug fix - widget was displaying sibling pages instead of child pages under certain circumstances
+
+= 1.31 =
+* Added `siblings` option to the widget
+* Added `show_current_page` option for use with the shortcode when `siblings` is set to `true`
+* Added `hide_wp_more` to remove the standard "Continue reading..." message from excerpts
+* Added `use_custom_excerpt`, `use_custom_title` and `use_custom_more` to the shortcode
+* Added more filters and actions to widget and shortcode to allow extension of plugin
+
+= 1.30 =
+* Bug fix - internationalization now works correctly (translations need work though - currently only French, which is known to be poor)
+* Added more filters to widget, list and shortcode to allow extension of plugin
+
+= 1.29 =
+* Bug fix - widget will now show on all pages/posts if "All Pages" or a specific parent page is selected
+* Bug fix - shortcode now closes query correctly (was causing issues with some themes)
+* The shortcode will now work with custom post types
+* You can now specify multiple parent page IDs (when using `list="true"`, only a single parent ID can be specified)
+
+= 1.28 =
+* Further improvements to integration when used with Video Thumbnails plugin
+
+= 1.27 =
+* Added the `siblings` parameter to show siblings of current page
+* Improved integration when used with Video Thumbnails plugin
+* Minor bug fixes for CC Child Pages Widget
+
+= 1.26 =
+* The CSS for displaying child pages has been re-written to allow for custom CSS to be more easily written - for example, specifying a border should no longer cause problems in the responsive layout. Fallbacks have been put in place for older versions of Internet Explorer.
+* The handling of Custom CSS from the settings page has been improved.
+* The loading of the plugin CSS has been returned to the default manner. While this means that CSS is loaded on pages where the shortcode is not used, it means that the CSS can be correctly minified by other plugins and ensures that valid HTML is generated.
+
+= 1.25 =
+* New option added to widget to show all top-level pages and their children. This can now be used as a complete replacement for the standard Pages widget
+* New option added to the plugins settings page allowing custom CSS code to be specified from within the plugin. This feature has been requested several times. This functionality will be expanded on in the future.
 
 = 1.24 =
 * Further enhancements to CSS when using both the `list` and `cols` parameters
@@ -279,6 +432,54 @@ The columns are responsive, and should adjust according to the browser being re-
 * Initial Release
 
 == Upgrade Notice ==
+
+= 1.34 =
+* Added `ignore_sticky_posts` parameter
+* Added `limit` parameter to limit the number of pages displayed
+* Added `offset` parameter to allow skipping a number of pages
+
+= 1.33 =
+* Added `posts_per_page` and `page` parameters for basic pagination
+* Added `page_ids` parameter to allow display of specific pages
+* Added `use_custom_link` parameter to allow the over-riding of the link target on a per page basis
+* Added new CSS IDs to help make styling more flexible
+
+= 1.32 =
+* Bug fix - widget was displaying sibling pages instead of child pages under certain circumstances
+
+= 1.31 =
+* Added `siblings` option to the widget
+* Added `show_current_page` option for use with the shortcode when `siblings` is set to `true`
+* Added `hide_wp_more` to remove the standard "Continue reading..." message from excerpts
+* Added `use_custom_excerpt`, `use_custom_title` and `use_custom_more` to the shortcode
+* Added more filters and actions to widget and shortcode to allow extension of plugin
+
+= 1.30 =
+* Bug fix - internationalization now works correctly (translations need work though - currently only French, which is known to be poor)
+* Added more filters to widget, list and shortcode to allow extension of plugin
+
+= 1.29 =
+* Bug fix - widget will now show on all pages/posts if "All Pages" or a specific parent page is selected
+* Bug fix - shortcode now closes query correctly (was causing issues with some themes)
+* The shortcode will now work with custom post types
+* You can now specify multiple parent page IDs (when using `list="true"`, only a single parent ID can be specified)
+
+= 1.28 =
+* Further improvements to integration when used with Video Thumbnails plugin
+
+= 1.27 =
+* Added the `siblings` parameter to show siblings of current page
+* Improved integration when used with Video Thumbnails plugin
+* Minor bug fixes for CC Child Pages Widget
+
+= 1.26 =
+* The CSS for displaying child pages has been re-written to allow for custom CSS to be more easily written - for example, specifying a border should no longer cause problems in the responsive layout. Fallbacks have been put in place for older versions of Internet Explorer.
+* The handling of Custom CSS from the settings page has been improved.
+* The loading of the plugin CSS has been returned to the default manner. While this means that CSS is loaded on pages where the shortcode is not used, it means that the CSS can be correctly minified by other plugins and ensures that valid HTML is generated.
+
+= 1.25 =
+* New option added to widget to show all top-level pages and their children. This can now be used as a complete replacement for the standard Pages widget
+* New option added to the plugins settings page allowing custom CSS code to be specified from within the plugin. This feature has been requested several times. This functionality will be expanded on in the future.
 
 = 1.23 =
 * Minor fix for CSS when using both the `list` and `cols` parameters

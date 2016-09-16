@@ -13,18 +13,41 @@ class ccchildpages {
 	const plugin_name = 'CC Child Pages';
 
 	// Plugin version
-	const plugin_version = '1.24';
+	const plugin_version = '1.34';
+
+	// ID Count
+	protected static $cc_id_counter;
 	
-	public static function load_plugin_textdomain() {
-		load_plugin_textdomain( 'cc-child-pages', FALSE, basename( dirname( __FILE__ ) ) . '/languages/' );
+	// Initialise class
+	public static function init($value=0) { self::$cc_id_counter = $value; }
+	
+	// Get unique ID
+	public static function get_unique_id() {
+		self::$cc_id_counter++;
+		return self::$cc_id_counter;
+	}
+	
+	public static function load_plugin_textdomain( ) {
+		load_plugin_textdomain( 'cc-child-pages', FALSE, dirname( dirname( plugin_basename( __FILE__ ) ) ) . '/languages/' );
 	}
 
 	public static function show_child_pages( $atts ) {
-		// Shortcode has been called, so NOW enqueue the CSS
-		wp_enqueue_style( 'ccchildpagescss' );
-
-		$a = shortcode_atts( array(
+		// Get unique id for this instance of CC Child Pages
+		$cc_uid = self::get_unique_id();
+		
+		// Store current page ID
+		$cc_current_page_id = get_the_ID();
+		
+		// Store image size details in case we need to output Video Thumbnails, etc. which may be external files
+		$img_sizes = get_intermediate_image_sizes();
+		$img_sizes[] = 'full'; // allow "virtual" image size ...
+		
+		$default_atts = apply_filters( 'ccchildpages_defaults' , array(
 			'id'			=> get_the_ID(),
+			'page_ids'		=> '',
+			'posts_per_page' => -1,
+			'limit'			=> -1,
+			'page' 			=> -1,
 			'cols'			=> '',
 			'depth'			=> '1',
 			'exclude'		=> '',
@@ -42,9 +65,34 @@ class ccchildpages {
 			'link_thumbs'	=> 'false',
 			'thumbs'		=> 'false',
 			'more'			=> __('Read more ...', 'cc-child-pages'),
-			'words'	=> 55,
-		), $atts );
+			'link'			=> '',
+			'siblings'		=> 'false',
+			'show_current_page' => 'false',
+			'hide_wp_more'  => 'false',
+			'use_custom_excerpt' => '',
+			'use_custom_title'=> '',
+			'use_custom_more' => '',
+			'use_custom_link' => 'cc_child_pages_link',
+			'ignore_sticky_posts' => 'true',
+			'offset'		=> 0,
+			'words'			=> 55,
+		));
+
+		$a = shortcode_atts( $default_atts, $atts );
 		
+		$a = apply_filters( 'ccchildpages_attributes', $a);
+				
+		// If we are displaying siblings, set starting point to page parent and add current page to exclude list
+		if ( strtolower(trim($a['siblings'])) == 'true' ) {
+			$a['id'] = wp_get_post_parent_id( get_the_ID() ) ? wp_get_post_parent_id( get_the_ID() ) : 0;
+			
+			
+			if ( strtolower(trim($a['show_current_page'])) != 'true' ) {
+				if ( $a['exclude'] != '' ) $a['exclude'] .= ',';
+				$a['exclude'] .= get_the_ID();
+			}
+		}
+
 		$depth = intval($a['depth']);
 		
 		if ( strtolower(trim($a['list'])) != 'true' && $a['cols'] == '' ) $a['cols']='3';
@@ -114,12 +162,28 @@ class ccchildpages {
 			$hide_more = FALSE;
 		}
 		
+		if ( strtolower(trim($a['hide_wp_more'])) == 'true' ) {
+			$hide_wp_more = TRUE;
+		}
+		else {
+			$hide_wp_more = FALSE;
+		}
+		
 		if ( strtolower(trim($a['hide_excerpt'])) == 'true' ) {
 			$hide_excerpt = TRUE;
 		}
 		else {
 			$hide_excerpt = FALSE;
 		}
+		
+		if ( strtolower(trim($a['ignore_sticky_posts'])) == 'true' ) {
+			$ignore_sticky_posts = TRUE;
+		}
+		else {
+			$ignore_sticky_posts = FALSE;
+		}
+		
+		$offset = ( intval($a['offset']) > 0 ) ? intval($a['offset']) : 0;
 		
 		if ( $a['order'] == 'ASC' ) {
 			$order = 'ASC';
@@ -201,19 +265,21 @@ class ccchildpages {
 		else {
 			$thumbs = strtolower(trim($a['thumbs']));
 			
-			$img_sizes = get_intermediate_image_sizes();
-			$img_sizes[] = 'full'; // allow "virtual" image size ...
-			
 			if ( ! in_array( $thumbs, $img_sizes ) ) $thumbs = 'medium';
 		}
 		
-		$more = esc_html(trim($a['more']));
+		$more = esc_html(trim($a['more'])); // default
 		
 		// if class is specified, substitue value for skin class
 		if ( $a['class'] != '' ) $skin = trim(esc_html($a['class']));
 		
-		$return_html = '<div class="ccchildpages ' . $class .' ' . $skin . ' ccclearfix">';
-
+		$outer_template = str_replace( '{{class}}', $class, apply_filters('ccchildpages_outer_template','<div id="ccchildpages-' . $cc_uid . '" class="ccchildpages {{class}} {{skin}} ccclearfix">{{ccchildpages}}</div>', $a) );
+		$outer_template = str_replace( '{{skin}}', $skin, $outer_template );
+		
+		$inner_template = apply_filters('ccchildpages_inner_template','<div class="ccchildpage {{page_class}}"><h3{{title_class}}>{{title}}</h3>{{thumbnail}}{{excerpt}}{{more}}</div>', $a);
+				
+//		$return_html = '<div class="ccchildpages ' . $class .' ' . $skin . ' ccclearfix">';
+		
 		$page_id = $a['id'];
 
 		if ( $list ) {	
@@ -226,10 +292,15 @@ class ccchildpages {
 				'sort_order'	=> $order,
 				'sort_column'	=> $orderby
 			);
+			
+			$post_type = get_post_type( $page_id );
+			$args['post_type'] = $post_type;
+			
+			$args = apply_filters('ccchildpages_list_pages_args', $args, $a);
 		
 			$page_count = 0;		
 
-			$return_html .= '<ul class="ccchildpages_list ccclearfix">';
+			$return_html = '<ul class="ccchildpages_list ccclearfix">';
 						
 			$page_list = trim(wp_list_pages( $args ));
 			
@@ -238,17 +309,104 @@ class ccchildpages {
 			$return_html .= $page_list;
 			
 			$return_html .= '</ul>';
+			
 		}
-		else {				
+		else {
+			$return_html = '';
+			
+			$posts_array = explode(',', $page_id); // Allow for comma separated lists of IDs
+			$post_count = count ($posts_array);
+			
+			$posts_per_page = intval($a['posts_per_page']);
+			$page = intval($a['page']);
+			
+			$ccpage_var = ( is_front_page() ? 'page' : 'ccpage' . $cc_uid );
+						
+			$ccpaged = ( get_query_var( $ccpage_var ) ) ? absint( get_query_var( $ccpage_var ) ) : 1;
+
 			$args = array(
-				'post_type'      => 'page',
-				'posts_per_page' => -1,
-				'post_parent'    => $page_id,
+//				'post_type'      => 'page',
+//				'post_type'      => $post_type,
+				'posts_per_page' => $posts_per_page,
+//				'post_parent'    => $page_id,
 				'order'          => $order,
-				'orderby'			=> $orderby,
-				'post__not_in'		=> explode(',', $a['exclude']),
-				'post_status'		=> 'publish'
+				'orderby'		 => $orderby,
+				'post__not_in'	 => explode(',', $a['exclude']),
+				'ignore_sticky_posts' => $ignore_sticky_posts,
+				'post_status'	 => 'publish'
 			);
+			
+			if ( $posts_per_page > 0 ) {
+				$args['paged'] = $ccpaged;
+				
+				// If page has been set manually, override any pagination
+				if ( $page > 0 ) {
+					$args['paged'] = $page;
+				}
+			}
+			else {
+				if ( intval($a['limit']) > 0 ) {
+					// If limit is specified, show only that number of pages
+					$args['posts_per_page'] = intval($a['limit']);
+					$args['paged'] = 1;
+				}
+			}
+			
+			if ( $offset > 0 ) $args['offset'] = $offset;
+			
+			if ( $post_count > 1 ) {
+				// Multiple IDs specified, so set the post_parent__in parameter
+				$args['post_parent__in'] = $posts_array;
+				
+				/* // get post_type for each post specified ...
+				$post_type_array = array();
+				
+				foreach ( $posts_array as $post_id ) {
+					// Get post_type
+					$post_type = get_post_type( $post_id );
+					
+					if ( ! in_array($post_type, $post_type_array) ) $post_type_array[] = $post_type;
+				}
+				
+				$args['post_type'] = $post_type_array; */
+				
+				$args['post_type'] = 'any';
+			}
+			else {
+				// Single ID specified, so set the post_parent parameter
+				$args['post_parent'] = $page_id;
+				$args['post_type'] = get_post_type( $page_id );
+			}
+			
+			if ( $a['page_ids'] != '' ) {
+				// Multiple specific posts specified, so unset unwanted values in $args then build the lists of IDs
+				unset($args['post_parent']);
+				unset($args['post_parent__in']);
+				
+				$posts_array = explode( ',', $a['page_ids'] );
+				
+				$args['post__in'] = $posts_array;
+				$args['orderby'] = 'post__in';
+				
+				/* // get post_type for each post specified ...
+				$post_type_array = array();
+				
+				foreach ( $posts_array as $post_id ) {
+					// Get post_type
+					$post_type = get_post_type( $post_id );
+					
+					if ( ! in_array($post_type, $post_type_array) ) $post_type_array[] = $post_type;
+				}
+				
+				$args['post_type'] = $post_type_array; */
+								
+				$args['post_type'] = 'any';
+
+			}
+			
+			$args['ccchildpages'] = 'true';
+			
+			$args = apply_filters('ccchildpages_query_args', $args, $a);
 
 			$parent = new WP_Query( $args );
 		
@@ -257,6 +415,8 @@ class ccchildpages {
 			$page_count = 0;
 
 			while ( $parent->have_posts() ) {
+				
+				$tmp_html = $inner_template;
 			
 				$parent->the_post();
 				
@@ -284,27 +444,69 @@ class ccchildpages {
 				$page_class .= ' ccpage-count-' . $page_count;
 				$page_class .= ' ccpage-id-' . $id;
 				$page_class .= ' ccpage-' . self::the_slug($id);
-			
-				$link = get_permalink($id);
-			
-				$return_html .= '<div class="ccchildpage' . $page_class . '">';
-			
-				if ( ! $link_titles ) {
-					$return_html .= '<h3>' . get_the_title() . '</h3>';
+				
+				if ( $a['link'] == '' ) {
+					$link = get_permalink($id);
 				}
 				else {
-					$return_html .= '<h3 class="ccpage_linked_title"><a class="' . $title_link_class . '" href="' . $link . '" title="' . get_the_title() . '">' . get_the_title() . '</a></h3>';
+					$link = $a['link'];
 				}
 				
+				
+				$use_custom_link = trim($a['use_custom_link']);
+				if ( $use_custom_link != '' && $custom_meta_link = get_post_meta( $id, $use_custom_link, TRUE ) ) {
+					$link = ( trim( $custom_meta_link ) != '' ) ? trim( $custom_meta_link ) : $link;
+				}
+				$tmp_html = str_replace('{{page_class}}', $page_class, $tmp_html);
+				
+				$title_value = get_the_title(); // default
+				
+				$use_custom_title = trim($a['use_custom_title']);
+				$meta_title = ''; // default - no meta_title
+					
+				// If meta title field specified, get the value
+				if ( $use_custom_title != '' ) {
+					// Get value of custom field to be used as excerpt
+					$meta_title = trim(get_post_meta($id, $use_custom_title, TRUE));
+					// If value from custom field is set, use that - otherwise use page title
+					if ( $meta_title != '' ) {
+						$title_value = esc_html(trim($meta_title));
+					}
+				}
+					
+
+			
+				if ( ! $link_titles ) {
+					$title_html = $title_value;
+					$title_class = '';
+				}
+				else {
+					$title_html = '<a class="' . $title_link_class . '" href="' . $link . '" title="' . $title_value . '">' . $title_value . '</a>';
+					$title_class = ' class="ccpage_linked_title"';
+				}
+				$tmp_html = str_replace('{{title}}', $title_html, $tmp_html);
+				$tmp_html = str_replace('{{title_class}}', $title_class, $tmp_html);
+				
+				$thumb_url = '';
+				$thumbs_html = '';
+				
 				if ( $thumbs != FALSE ) {
+					
 					$thumb_attr = array(
 						'class'	=> "cc-child-pages-thumb",
-						'alt'	=> get_the_title(),
-						'title'	=> get_the_title(),
+						'alt'	=> $title_value,
+						'title'	=> $title_value,
 					);
 					
 					// Get the thumbnail code ...
 					$thumbnail = get_the_post_thumbnail($id, $thumbs, $thumb_attr);
+					
+					if ( $thumbnail != '' ) {
+						// Thumbnail found, so set thumb_url to actual URL of thumbnail
+						$tmp_thumb_id = get_post_thumbnail_id($id);
+						$tmp_thumb_url_array = wp_get_attachment_image_src($tmp_thumb_id, 'thumbnail-size', true);
+						$thumb_url = $tmp_thumb_url_array[0];
+					}
 					
 					// If no thumbnail found, request a "Video Thumbnail" (if plugin installed)
 					// to try and force generation of thumbnail
@@ -314,74 +516,189 @@ class ccchildpages {
 						if ( class_exists('Video_Thumbnails') && function_exists( 'get_video_thumbnail' ) ) {
 							// Call get_video_thumbnail to generate video thumbnail
 							$video_img = get_video_thumbnail($id);
+							
+							// If we got a result, display the image
+							if ( $video_img != '' ) {
+								
+								// First, try to pick up the thumbnail in case it has been regenerated (may be the case if automatic featured image is turned on)
+								$thumbnail = get_the_post_thumbnail($id, $thumbs, $thumb_attr);
+								
+								// If thumbnail hasn't been regenerated, use Video Thumbnail (may be the full size image)
+								if ( $thumbnail == '' ) {
+									
+									// First, try and find the attachment ID from the URL
+									$attachment_id = self::get_attachment_id($video_img);
+									
+									$thumb_url = $video_img;
+									
+									if ( $attachment_id != FALSE ) {
+										// Attachment found, get thumbnail
+										$thumbnail = wp_get_attachment_image( $attachment_id, $thumbs ) . "\n\n<!-- Thumbnail attachment -->\n\n";
+									}
+									else {
+										$thumbnail .= '<img src="' . $video_img . '" alt="' . $title_value . '" />';
+									}
+								}
+							}
 						}
 						
-						// Try getting post thumbnail again
-						$thumbnail = get_the_post_thumbnail($id, $thumbs, $thumb_attr);
 					}
 					
 					// If thumbnail is found, display it.
 					
 					if ( $thumbnail != '' ) {
 						if ( $link_thumbs ) {
-							$return_html .= '<a class="ccpage_linked_thumb" href="' . $link . '" title="' . get_the_title() . '">' . $thumbnail . '</a>';
+							$thumbs_html = '<a class="ccpage_linked_thumb" href="' . $link . '" title="' . $title_value . '">' . $thumbnail . '</a>';
 						}
 						else {
-							$return_html .= $thumbnail;
+							$thumbs_html = $thumbnail;
 						}
 					}
 				}
-
+				
+				$tmp_html = str_replace('{{thumbnail}}', $thumbs_html, $tmp_html);
+				$tmp_html = str_replace('{{thumbnail_url}}', $thumb_url, $tmp_html);
+				
+				$page_excerpt = '';
 
 				if ( ! $hide_excerpt ) {
 					$words = ( intval($a['words']) > 0 ? intval($a['words']) : 55 );
-				
-					if ( has_excerpt() ) {
+					
+					$use_custom_excerpt = trim($a['use_custom_excerpt']);
+					$meta_excerpt = ''; // default - no meta_excerpt
+					
+					// If meta excerpt field specified, get the value
+					if ( $use_custom_excerpt != '' ) {
+						// Get value of custom field to be used as excerpt
+						$meta_excerpt = trim(get_post_meta($id, $use_custom_excerpt, TRUE));
+					}
+					
+					// If value from custom field is set, use that - otherwise use page content
+					if ( $meta_excerpt != '' ) {
+						$page_excerpt = trim($meta_excerpt);
+					}
+					else if ( has_excerpt() ) {
 						$page_excerpt = get_the_excerpt();
 						if ( str_word_count(strip_tags($page_excerpt) ) > $words && $truncate_excerpt ) $page_excerpt = wp_trim_words( $page_excerpt, $words, '...' );
 					}
 					else {
-						$page_excerpt = do_shortcode( get_the_content() ); // get full page content
+						if ( $hide_wp_more ) {
+							$page_excerpt = do_shortcode( get_the_content('') ); // get full page content without continue link
+						}
+						else {
+							$page_excerpt = do_shortcode( get_the_content() ); // get full page content including continue link
+						}
 						
 						if ( str_word_count( wp_trim_words($page_excerpt, $words+10, '') ) > $words ) {
 							// If page content is longer than allowed words, 
 							$trunc = '...';
 						}
 						else {
-							// If page content is within allowe word count, do not add anything to the end of it
+							// If page content is within allowed word count, do not add anything to the end of it
 							$trunc = '';
 						}
 						$page_excerpt = wp_trim_words( $page_excerpt, $words, $trunc );
 					}
 				
-					$return_html .= '<div class="ccpages_excerpt">' . $page_excerpt . '</div>';
+					$page_excerpt = str_replace( '{{page_excerpt}}', $page_excerpt, apply_filters('ccchildpages_excerpt_template', '<div class="ccpages_excerpt">{{page_excerpt}}</div>', $a) );
 				}
+				
+				$tmp_html = str_replace('{{excerpt}}', $page_excerpt, $tmp_html);
+				
+				$more_html = '';
 			
-				if ( ! $hide_more ) $return_html .= '<p class="ccpages_more"><a href="' . $link . '" title="' . $more . '">' . $more . '</a></p>';
-			
-				$return_html .= '</div>';
+				$use_custom_more = trim($a['use_custom_more']);
+				// If meta more field specified, get the value
+				if ( $use_custom_more != '' ) {
+					// Get value of custom field to be used as excerpt
+					$meta_more = trim(get_post_meta($id, $use_custom_more, TRUE));
+					// If value from custom field is set, use that - otherwise use page title
+					if ( $meta_more != '' ) {
+						$more = esc_html(trim($meta_more));
+					}
+				}		
+		
+				if ( ! $hide_more ) {
+					$more_html = str_replace( '{{more}}', $more, apply_filters('ccchildpages_more_template', '<p class="ccpages_more"><a href="{{link}}" title="{{more}}">{{more}}</a></p>', $a ) );
+				}
+				
+				$tmp_html = str_replace('{{more}}', $more_html, $tmp_html);
+				$tmp_html = str_replace('{{link}}', $link, $tmp_html);
+				
+				$return_html .= $tmp_html;
+				
 			}
-		
-		}	
+			
+			if ( $posts_per_page > 0 && $page < 1 ) {
+				
+				$cc_link_format = '?' . $ccpage_var . '=%#%';
+				
+				$cc_num_results = $parent->found_posts;
+				
+				$cc_num_pages = intval(($cc_num_results - $offset)/$posts_per_page);
+				
+				if ( ($cc_num_results - $offset)%$posts_per_page > 0 ) $cc_num_pages++;
+				
+				$return_html .= '<div id="ccpages_nav-' . $cc_uid . '" class="ccpages_nav">' . paginate_links( array(
+					'format' => $cc_link_format,
+					'current' => $ccpaged,
+					'total' => $cc_num_pages
+					) ) . '</div>';
+				
+			}
+			
+			// Reset global post query
+			wp_reset_postdata();
+		} 	
 
-		$return_html .= '</div>';
+		$return_html = str_replace('{{ccchildpages}}', $return_html, $outer_template);
 		
-		wp_reset_query();
+		$return_html = apply_filters( 'ccchildpages_before_shortcode', '', $a ) . $return_html . apply_filters( 'ccchildpages_after_shortcode', '', $a );
+		
+//		wp_reset_query(); // Should not be required
 		
 		return $return_html;
 	}
 	
 	public static function enqueue_styles() {
 		$css_file = plugins_url( 'css/styles.css' , __FILE__ );
+		$css_skin_file = plugins_url( 'css/skins.css' , __FILE__ );
+		$css_conditional_file = plugins_url( 'css/styles.ie.css' , __FILE__ );
 		if ( !is_admin() ) {
-			// Register style, but do not enqueue it - we'll do that if the shortcode is used
+			// Load main styles
 			wp_register_style(
 				'ccchildpagescss',
 				$css_file,
 				false,
 				self::plugin_version
 			);
-			// wp_enqueue_style( 'ccchildpagescss' );
+			wp_enqueue_style( 'ccchildpagescss' );
+			
+			// Load skins
+			wp_register_style(
+				'ccchildpagesskincss',
+				$css_skin_file,
+				false,
+				self::plugin_version
+			);
+			wp_enqueue_style( 'ccchildpagesskincss' );
+			
+			// Conditionally load fallback for older versions of Internet Explorer
+			wp_register_style(
+				'ccchildpagesiecss',
+				$css_conditional_file,
+				false,
+				self::plugin_version
+			);
+			wp_enqueue_style( 'ccchildpagesiecss' );
+			wp_style_add_data( 'ccchildpagesiecss', 'conditional', 'lt IE 8' );
+			
+			// Load custom CSS
+			$custom_css = self::custom_css();
+			
+			if ( $custom_css != '' ) {
+				wp_add_inline_style( 'ccchildpagesskincss', $custom_css );
+			}
 		}
 	}
 
@@ -450,18 +767,21 @@ class ccchildpages {
 	public static function options_activation () {
 		$options = array();
 		$options['show_button'] = 'true';
+		$options['customcss'] = '';
 		
-		add_option('cc_child_pages', $options, '', 'yes');
+		$options = apply_filters( 'ccchildpages_options', $options );
+		
+		add_option( 'cc_child_pages', $options, '', 'yes' );
 	}
 	 
 	// Register settings ...
 	public static function register_options () {
-		register_setting('cc_child_pages', 'cc_child_pages');
+		register_setting( 'cc_child_pages', 'cc_child_pages' );
 	}
 	
 	// Add submenu
 	public static function options_menu () {
-		add_options_page('CC Child Pages', 'CC Child Pages', 'manage_options', 'cc-child-pages', 'ccchildpages::options_page');
+		add_options_page( 'CC Child Pages', 'CC Child Pages', 'manage_options', 'cc-child-pages', 'ccchildpages::options_page' );
 	}
 	
 	// Display options page
@@ -482,17 +802,38 @@ class ccchildpages {
 				else if ( $options['show_button'] == 'true' ) {
 					$show_button = TRUE;
 				}
+				
+				$customcss = empty( $options['customcss'] ) ? '' : $options['customcss'];
 			}
 			else {
 				$show_button = TRUE;
+				$customcss = '';
 			}
 		?>
 		<h2><?php _e('CC Child Pages options', 'cc-child-pages' ) ?></h2>
-		<p><label>Add button to the visual editor: <input type="radio" name="cc_child_pages[show_button]" value="true" <?php checked(TRUE,$show_button) ?> > Yes <input type="radio" name="cc_child_pages[show_button]" value="false" <?php checked(FALSE,$show_button) ?> > No</label></p>
-		<p class="submit"><input  type="submit" name="submit" class="button-primary" value="Update Options" /></p>
+		<p><label><?php _e( 'Add button to the visual editor:', 'cc-child-pages' ); ?> <input type="radio" name="cc_child_pages[show_button]" value="true" <?php checked(TRUE,$show_button) ?> > Yes <input type="radio" name="cc_child_pages[show_button]" value="false" <?php checked(FALSE,$show_button) ?> > No</label></p>
+		<p><label><?php _e( 'Custom CSS:', 'cc-child-pages' ); ?><br /><textarea name="cc_child_pages[customcss]" class="large-text code" rows="10"><?php echo esc_textarea($customcss) ?></textarea></label></p>
+		<?php do_action( 'ccchildpages_options_form', $options ); ?>
+		<p class="submit"><input  type="submit" name="submit" class="button-primary" value="<?php _e('Update Options','cc-child-pages'); ?>" /></p>
 	</form>
+
 </div>
 <?php
+	}
+	
+	/*
+	 * Output Custom CSS
+	 */
+	public static function custom_css() {
+		$custom_css = '';
+		if ( $options = get_option('cc_child_pages') ) {
+			if ( ! empty($options['customcss'])) {
+				if ( trim($options['customcss']) != '' ) {
+					$custom_css = trim( $options['customcss'] );
+				}
+			}
+		}
+		return $custom_css;
 	}
 	
 	/*
@@ -500,6 +841,68 @@ class ccchildpages {
 	 */
 	public static function show_page_excerpt () {
 		add_post_type_support( 'page', 'excerpt' );
+	}
+	
+	/*
+	 * Get Attachment ID from URL
+	 */
+	public static function get_attachment_id( $url ) {
+		$dir = wp_upload_dir();
+		
+		// baseurl never has a trailing slash
+		if ( FALSE === strpos( $url, $dir['baseurl'] . '/' ) ) {
+			// URL points to a place outside of upload directory
+			return FALSE;
+		}
+		
+		$file  = basename( $url );
+		$query = array(
+			'post_type'  => 'attachment',
+			'fields'     => 'ids',
+			'meta_query' => array(
+				array(
+					'value'   => $file,
+					'compare' => 'LIKE',
+				),#
+			)
+		);
+
+		$query['meta_query'][0]['key'] = '_wp_attached_file';
+		
+		// query attachments
+		$ids = get_posts( $query );
+		
+		if ( ! empty( $ids ) ) {
+			foreach ( $ids as $id ) {
+				// first entry of returned array is the URL
+				$tmp_url = wp_get_attachment_image_src( $id, 'full' );
+				if ( $url === array_shift( $tmp_url ) )
+					return $id;
+			}
+		}
+		
+		return FALSE;
+	}
+	
+	/*
+	 * Get size information for thumbnail by size
+	 */
+	private static function get_image_dimensions($thumbs) {
+		global $_wp_additional_image_sizes;
+		
+		$dimensions = array();
+		
+		// If a default image size, use get options method
+		if ( in_array( $thumbs, array( 'thumbnail', 'medium', 'large' ) ) ) {
+			$dimensions['height'] = get_option( $thumbs . '_size_h' );
+			$dimensions['width'] = get_option( $thumbs . '_size_w' );
+		}
+		elseif ( isset( $_wp_additional_image_sizes[ $thumbs ] ) ) {
+			$dimensions['height'] = $_wp_additional_image_sizes[ $thumbs ]['height'];
+			$dimensions['width'] = $_wp_additional_image_sizes[ $thumbs ]['width'];
+		}
+		
+		return $dimensions;
 	}
 	
 	/*
@@ -521,6 +924,47 @@ class ccchildpages {
 		}
 
 		return $links;
+	}
+	
+	public static function add_query_strings ( $vars ) {
+		// Register query strings for paging ...
+		for ( $i=1; $i<25; $i++ ) {
+			$vars[] = 'ccpage' . $i;
+		}
+		$vars[] = 'ccchildpages';
+		return $vars;
+	}
+	
+	public static function query_offset ( &$query ) {
+		// Check that query was called from CC Child Pages
+		if ( ! isset( $query->query_vars['ccchildpages'] ) ) return;
+		if ( $query->query_vars['ccchildpages'] != 'true' ) return;
+		
+		// Check whether offset has been specified
+		$offset = ( isset($query->query_vars['offset']) ) ? intval ( $query->query_vars['offset'] ) : -1;
+		if ( $offset < 1 ) return;
+		
+		// If we made it this far, the query is from CC Child Pages and an Offset has been specified!
+		$posts_per_page = ( isset($query->query_vars['posts_per_page']) ) ? intval( $query->query_vars['posts_per_page'] ) : -1;
+		
+		if ( $query->is_paged ) {
+			$paged = intval( $query->query_vars['paged'] );
+			
+			if ( $paged > 0 ) {
+				$page_offset = $offset + ( ($paged-1) * $posts_per_page );
+			}
+			else {
+				$page_offset = $offset;
+			}
+		}
+		else {
+			$page_offset = $offset;
+		}
+		$query->set('offset',$page_offset);
+		
+		// By default, if posts_per_page is set to -1 offset is ignored.
+		// To get around this, if posts_per_page is set to -1 we will set it to something large
+		if ( $posts_per_page < 1 ) $query->set('posts_per_page', 1000000);
 	}
 }
 

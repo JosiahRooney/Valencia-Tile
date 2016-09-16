@@ -117,7 +117,7 @@ class MSP_Frontend_Assets {
 
 	    	$uploads   = wp_upload_dir();
 			$css_file  = $uploads['baseurl'] . '/' . MSWP_SLUG . '/custom.css';
-			$css_file  = apply_filters( 'masterslider_custom_css_url', $css_file );
+			$css_file  = apply_filters( 'masterslider_custom_css_url', set_url_scheme( $css_file ) );
 
 			$styles_queue[ $this->prefix.'custom' ] = array(
 				'src'     => $css_file ,
@@ -141,7 +141,7 @@ class MSP_Frontend_Assets {
 	    // if custom.css is not writable, print css styles in page header
 	    if( ! empty( $inline_css ) ) {
 	    	if( current_user_can( 'manage_options' ) )
-	    		printf( "<!-- Note for admin: The custom.css file in [%s] is not writeable, so masterslider uses inline css callback instead. -->\n", MSWP_AVERTA_URL . '/assets/custom.css' );
+	    		printf( "<!-- Note for admin: The custom.css file in [%s] is not writeable, so masterslider uses inline css callback instead. -->\n", 'wp-content/uploads/'.MSWP_SLUG.'/custom.css' );
 	    	printf( "<style>%s</style>\n", $inline_css );
 	    }
 
